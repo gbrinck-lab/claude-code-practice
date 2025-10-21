@@ -100,6 +100,31 @@ class TestGenerarSaludo:
 
         assert nombre in resultado
 
+    def test_saludo_con_none(self):
+        """Verifica que maneje None correctamente."""
+        resultado = generar_saludo(None)
+
+        assert "Hola" in resultado
+        assert "Bienvenido" in resultado
+        # No debe incluir "None" en el saludo
+        assert "None" not in resultado
+
+    def test_saludo_con_espacios_solo(self):
+        """Verifica que maneje nombres con solo espacios."""
+        resultado = generar_saludo("   ")
+
+        # Debe dar saludo genérico
+        assert "Hola" in resultado
+        assert "Bienvenido" in resultado
+
+    def test_saludo_con_tipo_incorrecto(self):
+        """Verifica que maneje tipos de datos incorrectos."""
+        resultado = generar_saludo(123)
+
+        # Debe dar saludo genérico, no crashear
+        assert "Hola" in resultado
+        assert "Bienvenido" in resultado
+
 
 class TestSolicitarNombre:
     """Tests para la función solicitar_nombre."""
@@ -125,6 +150,37 @@ class TestSolicitarNombre:
         resultado = solicitar_nombre()
 
         assert resultado == ''
+
+    @patch('builtins.input', side_effect=EOFError)
+    @patch('builtins.print')
+    def test_maneja_eof(self, mock_print, mock_input):
+        """Verifica que maneje correctamente EOF (Ctrl+D)."""
+        resultado = solicitar_nombre()
+
+        # Debe retornar string vacío en caso de EOF
+        assert resultado == ''
+        assert isinstance(resultado, str)
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    def test_propaga_keyboard_interrupt(self, mock_input):
+        """Verifica que propague KeyboardInterrupt."""
+        # KeyboardInterrupt debe propagarse, no ser manejado
+        try:
+            solicitar_nombre()
+            assert False, "Debería haber lanzado KeyboardInterrupt"
+        except KeyboardInterrupt:
+            assert True
+
+    @patch('builtins.input', side_effect=Exception("Error de prueba"))
+    @patch('builtins.print')
+    def test_maneja_excepciones_generales(self, mock_print, mock_input):
+        """Verifica que maneje excepciones generales en input."""
+        resultado = solicitar_nombre()
+
+        # Debe retornar string vacío en caso de error
+        assert resultado == ''
+        # Debe haber impreso mensaje de error
+        assert mock_print.called
 
 
 class TestEjecutarPrograma:
@@ -309,6 +365,50 @@ class TestRegistrarEjecucion:
         # Verificar que el mensaje indica "sin nombre"
         call_args = str(mock_logger.info.call_args)
         assert "sin nombre" in call_args.lower()
+
+    def test_falla_con_logger_none(self):
+        """Verifica que lance error si logger es None."""
+        fecha = datetime(2024, 3, 15, 14, 30, 45)
+
+        try:
+            registrar_ejecucion(None, "Test", fecha)
+            assert False, "Debería haber lanzado ValueError"
+        except ValueError as e:
+            assert "Logger" in str(e)
+
+    def test_falla_con_fecha_none(self):
+        """Verifica que lance error si fecha_hora es None."""
+        mock_logger = MagicMock()
+
+        try:
+            registrar_ejecucion(mock_logger, "Test", None)
+            assert False, "Debería haber lanzado ValueError"
+        except ValueError as e:
+            assert "fecha_hora" in str(e)
+
+    def test_maneja_nombre_none(self):
+        """Verifica que maneje nombre None correctamente."""
+        mock_logger = MagicMock()
+        fecha = datetime(2024, 3, 15, 14, 30, 45)
+
+        registrar_ejecucion(mock_logger, None, fecha)
+
+        # Debe registrar como "sin nombre"
+        mock_logger.info.assert_called_once()
+        call_args = str(mock_logger.info.call_args)
+        assert "sin nombre" in call_args.lower()
+
+    def test_maneja_nombre_con_espacios(self):
+        """Verifica que limpie espacios del nombre."""
+        mock_logger = MagicMock()
+        fecha = datetime(2024, 3, 15, 14, 30, 45)
+
+        registrar_ejecucion(mock_logger, "  Ana  ", fecha)
+
+        # Debe registrar con nombre sin espacios
+        mock_logger.info.assert_called_once()
+        call_args = str(mock_logger.info.call_args)
+        assert "Ana" in call_args
 
 
 class TestEjecutarProgramaConNuevasFuncionalidades:

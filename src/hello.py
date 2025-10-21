@@ -128,13 +128,30 @@ def registrar_ejecucion(logger, nombre, fecha_hora):
 
     Args:
         logger (logging.Logger): Logger configurado.
-        nombre (str): Nombre del usuario.
+        nombre (str): Nombre del usuario (puede ser None o vacío).
         fecha_hora (datetime): Fecha y hora de la ejecución.
+
+    Raises:
+        ValueError: Si logger o fecha_hora son None.
     """
-    if nombre:
-        logger.info(f"Saludo a: {nombre} - {fecha_hora.strftime('%Y-%m-%d %H:%M:%S')}")
-    else:
-        logger.info(f"Saludo sin nombre - {fecha_hora.strftime('%Y-%m-%d %H:%M:%S')}")
+    # Validar parámetros obligatorios
+    if logger is None:
+        raise ValueError("Logger no puede ser None")
+    if fecha_hora is None:
+        raise ValueError("fecha_hora no puede ser None")
+
+    try:
+        # Formatear fecha_hora
+        fecha_str = fecha_hora.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Registrar con o sin nombre
+        if nombre and isinstance(nombre, str) and nombre.strip():
+            logger.info(f"Saludo a: {nombre.strip()} - {fecha_str}")
+        else:
+            logger.info(f"Saludo sin nombre - {fecha_str}")
+    except Exception as e:
+        # Si falla el logging, no queremos crashear el programa
+        logger.error(f"Error al registrar ejecución: {e}")
 
 
 def obtener_fecha_hora_santiago():
@@ -188,15 +205,34 @@ def solicitar_nombre():
 
     Returns:
         str: Nombre del usuario ingresado (sin espacios al inicio/final).
+             Retorna string vacío si hay EOF o error de entrada.
 
     Examples:
         >>> # Esta función requiere interacción del usuario
         >>> # En tests se puede simular con mock
         pass
     """
-    prompt = colorear_texto("Por favor, ingresa tu nombre: ", "amarillo", negrita=True)
-    nombre = input(prompt).strip()
-    return nombre
+    try:
+        prompt = colorear_texto("Por favor, ingresa tu nombre: ", "amarillo", negrita=True)
+        nombre = input(prompt)
+
+        # Validar que nombre no sea None
+        if nombre is None:
+            return ""
+
+        # Limpiar espacios y retornar
+        return nombre.strip()
+    except EOFError:
+        # Manejar EOF (Ctrl+D o cierre de stdin)
+        print()  # Nueva línea para mejor formato
+        return ""
+    except KeyboardInterrupt:
+        # Re-lanzar KeyboardInterrupt para que main() lo maneje
+        raise
+    except Exception as e:
+        # Manejar otros errores de input
+        print(f"\nError al leer entrada: {e}")
+        return ""
 
 
 def generar_saludo(nombre=None):
@@ -215,8 +251,9 @@ def generar_saludo(nombre=None):
         >>> generar_saludo()
         '¡Hola! Bienvenido/a.'
     """
-    if nombre:
-        return f"¡Hola, {nombre}! Bienvenido/a."
+    # Validar que nombre sea un string no vacío
+    if nombre and isinstance(nombre, str) and nombre.strip():
+        return f"¡Hola, {nombre.strip()}! Bienvenido/a."
     else:
         return "¡Hola! Bienvenido/a."
 
@@ -259,8 +296,12 @@ def ejecutar_programa():
     # Solicitar nombre y generar saludo personalizado
     nombre_usuario = solicitar_nombre()
 
+    # Asegurar que nombre_usuario nunca sea None
+    if nombre_usuario is None:
+        nombre_usuario = ""
+
     # Validar que el nombre no esté vacío
-    if nombre_usuario:
+    if nombre_usuario and nombre_usuario.strip():
         print()
         saludo_personalizado = generar_saludo(nombre_usuario)
         print(colorear_texto(saludo_personalizado, "verde", negrita=True))
@@ -270,17 +311,33 @@ def ejecutar_programa():
         print(colorear_texto(mensaje, "amarillo"))
 
     # Registrar ejecución en el log
-    registrar_ejecucion(logger, nombre_usuario, fecha_hora)
+    try:
+        registrar_ejecucion(logger, nombre_usuario, fecha_hora)
+    except Exception as e:
+        # Si falla el logging, continuar pero mostrar advertencia
+        print(colorear_texto(f"\nAdvertencia: No se pudo guardar el log: {e}", "amarillo"))
 
 
 def main():
-    """Punto de entrada principal del programa."""
+    """Punto de entrada principal del programa.
+
+    Maneja excepciones globales y proporciona mensajes de error claros.
+    """
     try:
         ejecutar_programa()
     except KeyboardInterrupt:
+        # Usuario presionó Ctrl+C
         print("\n\n¡Hasta luego!")
+    except EOFError:
+        # EOF inesperado (aunque debería manejarse en solicitar_nombre)
+        print("\n\nEntrada cerrada inesperadamente. ¡Hasta luego!")
+    except ValueError as e:
+        # Errores de validación
+        print(f"\n{colorear_texto(f'Error de validación: {e}', 'rojo', negrita=True)}")
     except Exception as e:
-        print(f"\nOcurrió un error: {e}")
+        # Otros errores inesperados
+        print(f"\n{colorear_texto(f'Ocurrió un error inesperado: {e}', 'rojo', negrita=True)}")
+        print(colorear_texto("Por favor reporta este error.", "amarillo"))
 
 
 if __name__ == "__main__":
