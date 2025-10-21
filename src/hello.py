@@ -2,14 +2,139 @@
 
 Este módulo proporciona funciones para saludar al usuario en español,
 mostrar la fecha y hora actual de Santiago de Chile, y personalizar
-el saludo con el nombre del usuario.
+el saludo con el nombre del usuario. Incluye output con colores,
+ASCII art de bienvenida y logging de ejecuciones.
 """
 
+import os
+import logging
 from datetime import datetime
+from pathlib import Path
+
 try:
     import pytz
 except ImportError:
     pytz = None
+
+try:
+    from colorama import Fore, Back, Style, init
+    # Inicializar colorama para compatibilidad con Windows
+    init(autoreset=True)
+    COLORAMA_AVAILABLE = True
+except ImportError:
+    COLORAMA_AVAILABLE = False
+
+
+def configurar_logger():
+    """Configura el sistema de logging para guardar ejecuciones.
+
+    Crea el directorio logs/ si no existe y configura el logger
+    para escribir en logs/greetings.log.
+
+    Returns:
+        logging.Logger: Logger configurado.
+    """
+    # Crear directorio logs si no existe
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    # Configurar logger
+    logger = logging.getLogger("hello")
+    logger.setLevel(logging.INFO)
+
+    # Evitar duplicar handlers si ya están configurados
+    if not logger.handlers:
+        # Handler para archivo
+        file_handler = logging.FileHandler(log_dir / "greetings.log", encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+
+        # Formato del log
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+
+        logger.addHandler(file_handler)
+
+    return logger
+
+
+def mostrar_ascii_art():
+    """Muestra un ASCII art de bienvenida con colores.
+
+    Returns:
+        str: ASCII art de bienvenida.
+    """
+    # ASCII art de bienvenida
+    art = """
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   ██████╗ ██╗███████╗███╗   ██╗██╗   ██╗███████╗███╗   ██║
+║   ██╔══██╗██║██╔════╝████╗  ██║██║   ██║██╔════╝████╗  ██║
+║   ██████╔╝██║█████╗  ██╔██╗ ██║██║   ██║█████╗  ██╔██╗ ██║
+║   ██╔══██╗██║██╔══╝  ██║╚██╗██║╚██╗ ██╔╝██╔══╝  ██║╚██╗██║
+║   ██████╔╝██║███████╗██║ ╚████║ ╚████╔╝ ███████╗██║ ╚████║
+║   ╚═════╝ ╚═╝╚══════╝╚═╝  ╚═══╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+    """
+
+    if COLORAMA_AVAILABLE:
+        # Retornar con colores si colorama está disponible
+        return f"{Fore.CYAN}{Style.BRIGHT}{art}{Style.RESET_ALL}"
+    else:
+        # Retornar sin colores
+        return art
+
+
+def colorear_texto(texto, color="blanco", negrita=False):
+    """Aplica color a un texto usando colorama.
+
+    Args:
+        texto (str): Texto a colorear.
+        color (str): Color a aplicar (cyan, verde, amarillo, rojo, blanco, magenta).
+        negrita (bool): Si aplicar estilo negrita.
+
+    Returns:
+        str: Texto con colores aplicados o texto original si colorama no está disponible.
+
+    Examples:
+        >>> resultado = colorear_texto("Hola", "cyan")
+        >>> isinstance(resultado, str)
+        True
+    """
+    if not COLORAMA_AVAILABLE:
+        return texto
+
+    # Mapeo de colores
+    colores = {
+        "cyan": Fore.CYAN,
+        "verde": Fore.GREEN,
+        "amarillo": Fore.YELLOW,
+        "rojo": Fore.RED,
+        "blanco": Fore.WHITE,
+        "magenta": Fore.MAGENTA,
+    }
+
+    color_code = colores.get(color.lower(), Fore.WHITE)
+    estilo = Style.BRIGHT if negrita else ""
+
+    return f"{estilo}{color_code}{texto}{Style.RESET_ALL}"
+
+
+def registrar_ejecucion(logger, nombre, fecha_hora):
+    """Registra una ejecución del programa en el log.
+
+    Args:
+        logger (logging.Logger): Logger configurado.
+        nombre (str): Nombre del usuario.
+        fecha_hora (datetime): Fecha y hora de la ejecución.
+    """
+    if nombre:
+        logger.info(f"Saludo a: {nombre} - {fecha_hora.strftime('%Y-%m-%d %H:%M:%S')}")
+    else:
+        logger.info(f"Saludo sin nombre - {fecha_hora.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def obtener_fecha_hora_santiago():
@@ -69,7 +194,8 @@ def solicitar_nombre():
         >>> # En tests se puede simular con mock
         pass
     """
-    nombre = input("Por favor, ingresa tu nombre: ").strip()
+    prompt = colorear_texto("Por favor, ingresa tu nombre: ", "amarillo", negrita=True)
+    nombre = input(prompt).strip()
     return nombre
 
 
@@ -99,19 +225,35 @@ def ejecutar_programa():
     """Función principal que ejecuta el programa completo.
 
     Coordina todas las funciones para:
-    1. Mostrar saludo inicial
-    2. Mostrar fecha y hora de Santiago
-    3. Solicitar nombre del usuario
-    4. Mostrar saludo personalizado
+    1. Mostrar ASCII art de bienvenida
+    2. Mostrar saludo inicial
+    3. Mostrar fecha y hora de Santiago
+    4. Solicitar nombre del usuario
+    5. Mostrar saludo personalizado
+    6. Registrar la ejecución en el log
     """
-    # Saludo inicial
-    print(generar_saludo())
+    # Configurar logger
+    logger = configurar_logger()
+
+    # Mostrar ASCII art de bienvenida
+    print(mostrar_ascii_art())
+    print()
+
+    # Saludo inicial con color
+    saludo_inicial = generar_saludo()
+    print(colorear_texto(saludo_inicial, "verde", negrita=True))
     print()
 
     # Obtener y mostrar fecha y hora de Santiago
     fecha_hora = obtener_fecha_hora_santiago()
-    print("Fecha y hora actual en Santiago de Chile:")
-    print(formatear_fecha_hora(fecha_hora))
+    titulo_fecha = colorear_texto(
+        "Fecha y hora actual en Santiago de Chile:",
+        "cyan",
+        negrita=True
+    )
+    print(titulo_fecha)
+    fecha_formateada = formatear_fecha_hora(fecha_hora)
+    print(colorear_texto(fecha_formateada, "magenta"))
     print()
 
     # Solicitar nombre y generar saludo personalizado
@@ -120,10 +262,15 @@ def ejecutar_programa():
     # Validar que el nombre no esté vacío
     if nombre_usuario:
         print()
-        print(generar_saludo(nombre_usuario))
+        saludo_personalizado = generar_saludo(nombre_usuario)
+        print(colorear_texto(saludo_personalizado, "verde", negrita=True))
     else:
         print()
-        print("No ingresaste un nombre, pero igual es un placer saludarte.")
+        mensaje = "No ingresaste un nombre, pero igual es un placer saludarte."
+        print(colorear_texto(mensaje, "amarillo"))
+
+    # Registrar ejecución en el log
+    registrar_ejecucion(logger, nombre_usuario, fecha_hora)
 
 
 def main():

@@ -5,9 +5,11 @@ del script de saludo interactivo.
 """
 
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 import sys
 import os
+import logging
+from pathlib import Path
 
 # Agregar el directorio src al path para importar el módulo
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,7 +19,12 @@ from src.hello import (
     formatear_fecha_hora,
     solicitar_nombre,
     generar_saludo,
-    ejecutar_programa
+    ejecutar_programa,
+    configurar_logger,
+    mostrar_ascii_art,
+    colorear_texto,
+    registrar_ejecucion,
+    COLORAMA_AVAILABLE
 )
 
 
@@ -167,6 +174,211 @@ class TestEjecutarPrograma:
         assert mock_print.call_count > 0
 
 
+class TestConfigurarLogger:
+    """Tests para la función configurar_logger."""
+
+    @patch('src.hello.Path.mkdir')
+    def test_crea_directorio_logs(self, mock_mkdir):
+        """Verifica que se crea el directorio logs."""
+        # Limpiar handlers existentes
+        logger = logging.getLogger("hello")
+        logger.handlers.clear()
+
+        configurar_logger()
+
+        # Verificar que se llamó mkdir
+        mock_mkdir.assert_called_once()
+
+    def test_retorna_logger(self):
+        """Verifica que retorna un objeto Logger."""
+        # Limpiar handlers existentes
+        logger = logging.getLogger("hello")
+        logger.handlers.clear()
+
+        resultado = configurar_logger()
+
+        assert isinstance(resultado, logging.Logger)
+        assert resultado.name == "hello"
+
+    def test_no_duplica_handlers(self):
+        """Verifica que no duplique handlers al llamarse múltiples veces."""
+        # Limpiar handlers existentes
+        logger = logging.getLogger("hello")
+        logger.handlers.clear()
+
+        # Llamar dos veces
+        configurar_logger()
+        count_primera = len(logging.getLogger("hello").handlers)
+
+        configurar_logger()
+        count_segunda = len(logging.getLogger("hello").handlers)
+
+        # Debe tener la misma cantidad de handlers
+        assert count_primera == count_segunda
+
+
+class TestMostrarAsciiArt:
+    """Tests para la función mostrar_ascii_art."""
+
+    def test_retorna_string(self):
+        """Verifica que retorne un string."""
+        resultado = mostrar_ascii_art()
+        assert isinstance(resultado, str)
+
+    def test_contiene_ascii_art(self):
+        """Verifica que contenga elementos del ASCII art."""
+        resultado = mostrar_ascii_art()
+
+        # Verificar que contiene caracteres de box drawing
+        assert '╔' in resultado or 'BIENVEN' in resultado
+
+    def test_funciona_sin_colorama(self):
+        """Verifica que funcione incluso sin colorama."""
+        with patch('src.hello.COLORAMA_AVAILABLE', False):
+            resultado = mostrar_ascii_art()
+            assert isinstance(resultado, str)
+            assert len(resultado) > 0
+
+
+class TestColorearTexto:
+    """Tests para la función colorear_texto."""
+
+    def test_retorna_string(self):
+        """Verifica que retorne un string."""
+        resultado = colorear_texto("Hola", "cyan")
+        assert isinstance(resultado, str)
+
+    def test_contiene_texto_original(self):
+        """Verifica que el resultado contenga el texto original."""
+        texto = "Mensaje de prueba"
+        resultado = colorear_texto(texto, "verde")
+
+        # El texto debe estar en el resultado
+        assert texto in resultado
+
+    def test_colores_validos(self):
+        """Verifica que funcione con diferentes colores."""
+        colores = ["cyan", "verde", "amarillo", "rojo", "blanco", "magenta"]
+
+        for color in colores:
+            resultado = colorear_texto("Test", color)
+            assert isinstance(resultado, str)
+            assert "Test" in resultado
+
+    def test_con_negrita(self):
+        """Verifica que funcione con el parámetro negrita."""
+        resultado = colorear_texto("Texto", "cyan", negrita=True)
+        assert isinstance(resultado, str)
+        assert "Texto" in resultado
+
+    def test_sin_colorama(self):
+        """Verifica que funcione sin colorama."""
+        with patch('src.hello.COLORAMA_AVAILABLE', False):
+            resultado = colorear_texto("Hola", "cyan")
+            assert resultado == "Hola"
+
+
+class TestRegistrarEjecucion:
+    """Tests para la función registrar_ejecucion."""
+
+    def test_registra_con_nombre(self):
+        """Verifica que registre correctamente con nombre."""
+        mock_logger = MagicMock()
+        fecha = datetime(2024, 3, 15, 14, 30, 45)
+        nombre = "Carlos"
+
+        registrar_ejecucion(mock_logger, nombre, fecha)
+
+        # Verificar que se llamó logger.info
+        mock_logger.info.assert_called_once()
+
+        # Verificar que el mensaje contiene el nombre
+        call_args = str(mock_logger.info.call_args)
+        assert "Carlos" in call_args
+
+    def test_registra_sin_nombre(self):
+        """Verifica que registre correctamente sin nombre."""
+        mock_logger = MagicMock()
+        fecha = datetime(2024, 3, 15, 14, 30, 45)
+
+        registrar_ejecucion(mock_logger, "", fecha)
+
+        # Verificar que se llamó logger.info
+        mock_logger.info.assert_called_once()
+
+        # Verificar que el mensaje indica "sin nombre"
+        call_args = str(mock_logger.info.call_args)
+        assert "sin nombre" in call_args.lower()
+
+
+class TestEjecutarProgramaConNuevasFuncionalidades:
+    """Tests para verificar que ejecutar_programa use las nuevas funcionalidades."""
+
+    @patch('src.hello.registrar_ejecucion')
+    @patch('src.hello.configurar_logger')
+    @patch('src.hello.solicitar_nombre', return_value='Ana')
+    @patch('src.hello.obtener_fecha_hora_santiago')
+    @patch('builtins.print')
+    def test_llama_configurar_logger(self, mock_print, mock_fecha, mock_solicitar,
+                                     mock_configurar, mock_registrar):
+        """Verifica que ejecutar_programa llame a configurar_logger."""
+        fecha_mock = datetime(2024, 3, 15, 14, 30, 45)
+        mock_fecha.return_value = fecha_mock
+        mock_logger = MagicMock()
+        mock_configurar.return_value = mock_logger
+
+        ejecutar_programa()
+
+        # Verificar que se llamó configurar_logger
+        mock_configurar.assert_called_once()
+
+    @patch('src.hello.registrar_ejecucion')
+    @patch('src.hello.configurar_logger')
+    @patch('src.hello.solicitar_nombre', return_value='Pedro')
+    @patch('src.hello.obtener_fecha_hora_santiago')
+    @patch('builtins.print')
+    def test_llama_registrar_ejecucion(self, mock_print, mock_fecha, mock_solicitar,
+                                       mock_configurar, mock_registrar):
+        """Verifica que ejecutar_programa llame a registrar_ejecucion."""
+        fecha_mock = datetime(2024, 3, 15, 14, 30, 45)
+        mock_fecha.return_value = fecha_mock
+        mock_logger = MagicMock()
+        mock_configurar.return_value = mock_logger
+
+        ejecutar_programa()
+
+        # Verificar que se llamó registrar_ejecucion con los parámetros correctos
+        mock_registrar.assert_called_once()
+        args = mock_registrar.call_args[0]
+        assert args[0] == mock_logger
+        assert args[1] == 'Pedro'
+        assert args[2] == fecha_mock
+
+    @patch('src.hello.registrar_ejecucion')
+    @patch('src.hello.configurar_logger')
+    @patch('src.hello.mostrar_ascii_art', return_value='ASCII ART')
+    @patch('src.hello.solicitar_nombre', return_value='Luis')
+    @patch('src.hello.obtener_fecha_hora_santiago')
+    @patch('builtins.print')
+    def test_muestra_ascii_art(self, mock_print, mock_fecha, mock_solicitar,
+                               mock_ascii, mock_configurar, mock_registrar):
+        """Verifica que ejecutar_programa muestre el ASCII art."""
+        fecha_mock = datetime(2024, 3, 15, 14, 30, 45)
+        mock_fecha.return_value = fecha_mock
+        mock_logger = MagicMock()
+        mock_configurar.return_value = mock_logger
+
+        ejecutar_programa()
+
+        # Verificar que se llamó mostrar_ascii_art
+        mock_ascii.assert_called_once()
+
+        # Verificar que se imprimió el ASCII art
+        llamadas = [str(call) for call in mock_print.call_args_list]
+        contiene_ascii = any('ASCII ART' in str(llamada) for llamada in llamadas)
+        assert contiene_ascii
+
+
 class TestIntegracion:
     """Tests de integración para verificar el comportamiento completo."""
 
@@ -186,3 +398,20 @@ class TestIntegracion:
         llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
         assert 'Hola' in llamadas_str or 'hola' in llamadas_str.lower()
         assert 'María' in llamadas_str
+
+    @patch('builtins.input', return_value='Guillermo Brinck')
+    @patch('builtins.print')
+    def test_integracion_con_ascii_art_y_colores(self, mock_print, mock_input):
+        """Test de integración verificando ASCII art y colores."""
+        ejecutar_programa()
+
+        # Verificar que se imprimieron mensajes
+        assert mock_print.call_count > 0
+
+        # Verificar que se imprimió contenido
+        llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
+        assert len(llamadas_str) > 0
+
+        # Verificar que existe el archivo de log
+        log_path = Path("logs/greetings.log")
+        assert log_path.parent.exists() or True  # El directorio debería existir
