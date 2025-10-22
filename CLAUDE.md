@@ -21,3 +21,27 @@ Aprender a usar Claude Code on the Web de forma efectiva
 ## Contexto del Repositorio
 Este es un repositorio de práctica para aprender Claude Code.
 Estamos construyendo pequeños proyectos educativos.
+
+## Session Start Hook
+```bash
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Configurar variables de entorno de desarrollo
+export ENV=development
+export DEBUG=true
+
+# Crear directorios necesarios
+mkdir
+-p logs
+mkdir
+-p data
+```
+
+## Configuración de Red
+
+Network Access: Limited
+
+Dominios adicionales permitidos:
+- api.example.com
+- cdn.mycdn.com
