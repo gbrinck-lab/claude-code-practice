@@ -38,11 +38,16 @@ class TestObtenerFechaHoraSantiago:
 
     def test_fecha_es_reciente(self):
         """Verifica que la fecha retornada sea cercana a la actual."""
+        import time
+        antes = time.time()
         resultado = obtener_fecha_hora_santiago()
-        ahora = datetime.now()
-        # La diferencia debería ser menor a 1 minuto
-        diferencia = abs((ahora - resultado.replace(tzinfo=None)).total_seconds())
-        assert diferencia < 60
+        despues = time.time()
+
+        # Convertir resultado a timestamp
+        resultado_timestamp = resultado.timestamp()
+
+        # Verificar que el timestamp esté entre antes y después
+        assert antes <= resultado_timestamp <= despues + 1  # +1 segundo de tolerancia
 
 
 class TestFormatearFechaHora:
@@ -515,3 +520,156 @@ class TestIntegracion:
         # Verificar que existe el archivo de log
         log_path = Path("logs/greetings.log")
         assert log_path.parent.exists() or True  # El directorio debería existir
+
+
+class TestFallbacksSinDependencias:
+    """Tests para verificar comportamiento sin dependencias opcionales."""
+
+    @patch('src.hello.pytz', None)
+    def test_obtener_fecha_sin_pytz(self):
+        """Verifica que funcione sin pytz instalado."""
+        # Reimportar para que use pytz = None
+        import importlib
+        import src.hello
+        importlib.reload(src.hello)
+
+        # Debería retornar datetime sin timezone
+        resultado = src.hello.obtener_fecha_hora_santiago()
+        assert isinstance(resultado, datetime)
+
+    def test_colorear_texto_sin_colorama(self):
+        """Verifica que colorear_texto funcione sin colorama."""
+        with patch('src.hello.COLORAMA_AVAILABLE', False):
+            resultado = colorear_texto("Test", "cyan", negrita=True)
+            # Sin colorama debe retornar el texto original
+            assert resultado == "Test"
+
+    def test_mostrar_ascii_art_sin_colorama(self):
+        """Verifica que ASCII art funcione sin colorama."""
+        with patch('src.hello.COLORAMA_AVAILABLE', False):
+            resultado = mostrar_ascii_art()
+            assert isinstance(resultado, str)
+            assert "╔" in resultado  # Debe contener el ASCII art
+
+
+class TestManejoErroresLogging:
+    """Tests para manejo de errores en logging."""
+
+    @patch('src.hello.registrar_ejecucion')
+    @patch('src.hello.configurar_logger')
+    @patch('src.hello.solicitar_nombre', return_value='Test')
+    @patch('src.hello.obtener_fecha_hora_santiago')
+    @patch('builtins.print')
+    def test_error_en_registrar_ejecucion(self, mock_print, mock_fecha, mock_solicitar,
+                                          mock_configurar, mock_registrar):
+        """Verifica manejo de error al registrar ejecución."""
+        fecha_mock = datetime(2024, 3, 15, 14, 30, 45)
+        mock_fecha.return_value = fecha_mock
+        mock_logger = MagicMock()
+        mock_configurar.return_value = mock_logger
+
+        # Simular error en registrar_ejecucion
+        mock_registrar.side_effect = Exception("Error de prueba en logging")
+
+        # Ejecutar programa - no debe crashear
+        from src.hello import ejecutar_programa
+        ejecutar_programa()
+
+        # Verificar que se imprimió advertencia
+        llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
+        assert 'Advertencia' in llamadas_str or 'advertencia' in llamadas_str.lower()
+
+    def test_registrar_ejecucion_error_en_strftime(self):
+        """Verifica manejo de error en strftime."""
+        mock_logger = MagicMock()
+
+        # Crear datetime mock que falle en strftime
+        fecha_mock = MagicMock()
+        fecha_mock.strftime.side_effect = Exception("Error en strftime")
+
+        # No debe crashear, debe llamar logger.error
+        registrar_ejecucion(mock_logger, "Test", fecha_mock)
+
+        # Verificar que se llamó logger.error
+        mock_logger.error.assert_called_once()
+
+
+class TestMainExceptionHandling:
+    """Tests para manejo de excepciones en main()."""
+
+    @patch('src.hello.ejecutar_programa')
+    @patch('builtins.print')
+    def test_main_keyboard_interrupt(self, mock_print, mock_ejecutar):
+        """Verifica que main() maneje KeyboardInterrupt."""
+        mock_ejecutar.side_effect = KeyboardInterrupt()
+
+        from src.hello import main
+        main()
+
+        # Verificar que se imprimió mensaje de despedida
+        llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
+        assert 'luego' in llamadas_str.lower() or 'Hasta' in llamadas_str
+
+    @patch('src.hello.ejecutar_programa')
+    @patch('builtins.print')
+    def test_main_eoferror(self, mock_print, mock_ejecutar):
+        """Verifica que main() maneje EOFError."""
+        mock_ejecutar.side_effect = EOFError()
+
+        from src.hello import main
+        main()
+
+        # Verificar que se imprimió mensaje apropiado
+        llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
+        assert 'cerrada' in llamadas_str.lower() or 'luego' in llamadas_str.lower()
+
+    @patch('src.hello.ejecutar_programa')
+    @patch('builtins.print')
+    def test_main_valueerror(self, mock_print, mock_ejecutar):
+        """Verifica que main() maneje ValueError."""
+        mock_ejecutar.side_effect = ValueError("Error de validación de prueba")
+
+        from src.hello import main
+        main()
+
+        # Verificar que se imprimió mensaje de error
+        llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
+        assert 'validación' in llamadas_str.lower() or 'Error' in llamadas_str
+
+    @patch('src.hello.ejecutar_programa')
+    @patch('builtins.print')
+    def test_main_exception_general(self, mock_print, mock_ejecutar):
+        """Verifica que main() maneje excepciones generales."""
+        mock_ejecutar.side_effect = Exception("Error inesperado de prueba")
+
+        from src.hello import main
+        main()
+
+        # Verificar que se imprimió mensaje de error
+        llamadas_str = ' '.join([str(call) for call in mock_print.call_args_list])
+        assert 'error' in llamadas_str.lower() or 'Error' in llamadas_str
+
+
+class TestEjecutarProgramaEdgeCases:
+    """Tests para casos edge en ejecutar_programa."""
+
+    @patch('src.hello.solicitar_nombre', return_value=None)
+    @patch('src.hello.registrar_ejecucion')
+    @patch('src.hello.configurar_logger')
+    @patch('src.hello.obtener_fecha_hora_santiago')
+    @patch('builtins.print')
+    def test_nombre_usuario_none(self, mock_print, mock_fecha, mock_configurar,
+                                 mock_registrar, mock_solicitar):
+        """Verifica que maneje nombre_usuario None."""
+        fecha_mock = datetime(2024, 3, 15, 14, 30, 45)
+        mock_fecha.return_value = fecha_mock
+        mock_logger = MagicMock()
+        mock_configurar.return_value = mock_logger
+
+        from src.hello import ejecutar_programa
+        ejecutar_programa()
+
+        # Verificar que se llamó registrar_ejecucion con string vacío
+        mock_registrar.assert_called_once()
+        args = mock_registrar.call_args[0]
+        assert args[1] == ""  # nombre_usuario debe ser "" no None
